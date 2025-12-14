@@ -1,3 +1,23 @@
+# --- كود Replit Keep Alive 24/7 ---
+# هذا الجزء يضمن أن Replit لا يوقف البوت
+from threading import Thread
+from flask import Flask
+
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+def run():
+  app.run(host='0.0.0.0',port=8080)
+
+def keep_alive():  
+    t = Thread(target=run)
+    t.start()
+# ----------------------------------
+
+
 import discord
 from discord.ext import commands
 from google import genai
@@ -7,7 +27,7 @@ from datetime import datetime
 
 # --- 1. Configuration and Initialization ---
 
-# تحميل المتغيرات من ملف .env (التوكنات والمفاتيح فقط)
+# تحميل المتغيرات من ملف .env (سيتم قراءتها من Secrets في Replit)
 load_dotenv()
 
 # استدعاء مفاتيح الوصول من البيئة
@@ -15,7 +35,6 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # الأرقام التعريفية (IDs) مدمجة هنا لضمان التشغيل السليم وعدم الخطأ في ملف .env
-# الأرقام المستخدمة سابقاً
 TICKET_CHANNEL_ID = 1239971597146783744
 ACTIONS_CHANNEL_ID = 1239621280542490726
 WARNING_1_ROLE_ID = 1447160434724438056
@@ -194,6 +213,10 @@ async def on_message(message):
 # --- 5. Run Bot ---
 
 print("⚠️ Bot is starting...")
+
+# تفعيل خاصية Keep Alive لضمان عمل Replit 24/7
+keep_alive() 
+
 if DISCORD_TOKEN:
     try:
         bot.run(DISCORD_TOKEN)

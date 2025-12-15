@@ -1,4 +1,4 @@
-# --- كود Replit Keep Alive 24/7 ---
+# --- 1. Replit Keep Alive 24/7 (يجب أن يكون في البداية) ---
 # هذا الجزء يضمن أن Replit لا يوقف البوت
 from threading import Thread
 from flask import Flask
@@ -15,7 +15,7 @@ def run():
 def keep_alive():  
     t = Thread(target=run)
     t.start()
-# ----------------------------------
+# -----------------------------------------------------------
 
 
 import discord
@@ -25,16 +25,16 @@ from dotenv import load_dotenv
 import os
 from datetime import datetime
 
-# --- 1. Configuration and Initialization ---
+# --- 2. Configuration and Initialization ---
 
-# تحميل المتغيرات من ملف .env (سيتم قراءتها من Secrets في Replit)
+# تحميل المتغيرات من البيئة (Replit Secrets)
 load_dotenv()
 
 # استدعاء مفاتيح الوصول من البيئة
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# الأرقام التعريفية (IDs) مدمجة هنا لضمان التشغيل السليم وعدم الخطأ في ملف .env
+# الأرقام التعريفية (IDs) - (تأكد من أن هذه هي الأرقام الصحيحة لخادمك)
 TICKET_CHANNEL_ID = 1239971597146783744
 ACTIONS_CHANNEL_ID = 1239621280542490726
 WARNING_1_ROLE_ID = 1447160434724438056
@@ -43,27 +43,29 @@ WARNING_3_ROLE_ID = 1447160521286746225
 BLACKLIST_ROLE_ID = 1447160592803692677
 
 
-# تهيئة البوت ونموذج Gemini
-# استخدام Intents.all() لضمان استقبال جميع أنواع الرسائل
+# تهيئة البوت
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# تهيئة نموذج جوجل
+# تهيئة نموذج Gemini
+client = None
 if GEMINI_API_KEY:
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
     except Exception as e:
         print(f"❌ Error initializing Gemini Client: {e}")
-        client = None
 else:
     print("❌ Critical Error: GEMINI_API_KEY not found in the environment.")
-    client = None
 
 
-# --- 2. Gemini System Prompt for Accounting/Support (Arabic) ---
+# --- 3. Gemini System Prompt for Accounting/Support (Arabic) ---
 
-SYSTEM_PROMPT_ACCOUNTING = f"""
-أنت بوت الدعم الفني والمحاسبة الآلي لخادم **OSLO RP**. مهمتك هي تقييم الشكاوى والاستفسارات وحلها بصرامة وفقاً للقوانين المرفقة.
+SYSTEM_PROMPT_ACCOUNTING = """
+أنت بوت الدعم الفني والمحاسبة الآلي لخادم **OSLO RP**. العام الحالي هو **2025**.
+
+**توجيهات اللغة:** يجب أن تكون جميع ردودك باللغة العربية الفصحى. لديك القدرة على فهم جميع اللهجات العربية (الخليجية، المصرية، الشامية، إلخ)، ولكن الرد يجب أن يكون بالفصحى.
+
+مهمتك هي تقييم الشكاوى والاستفسارات وحلها بصرامة وفقاً للقوانين المرفقة.
 
 **تعليمات العمل الإلزامية:**
 1.  **الاستفسارات والدعم الفني:** أجب بوضوح وهدوء، وقدم حلولاً خطوة بخطوة.
@@ -88,25 +90,28 @@ SYSTEM_PROMPT_ACCOUNTING = f"""
 * القوانين الأخرى (دعم/توضيح/تنبيه): -> `[ACTION: NONE]`
 """
 
-# --- 3. AI Helper Functions ---
+# --- 4. AI Helper Functions (تم التعديل لحل خطأ system_instruction) ---
 
 async def get_ai_response(prompt: str, system_instruction: str):
-    """Sends message to Gemini model and retrieves response."""
+    """Sends message to Gemini model and retrieves response using correct contents structure."""
     if not client:
-        return "عفواً، فشل الاتصال بنظام Gemini. يرجى مراجعة مفتاح API في ملف .env."
+        return "عفواً، فشل الاتصال بنظام Gemini. يرجى مراجعة مفتاح API."
         
     try:
+        # التنسيق الصحيح لتضمين System Instruction مباشرة في Contents
+        contents_list = [
+            # ندمج الـ System Prompt والـ User Prompt في رسالة واحدة ليقرأها النموذج
+            {"role": "user", "parts": [{"text": system_instruction + "\n\n" + "الطلب أو السؤال: " + prompt}]},
+        ]
+        
+        # إرسال المحتوى إلى النموذج
         response = client.models.generate_content(
             model='gemini-2.5-flash',
-            contents=[
-                {"role": "user", "parts": [{"text": prompt}]},
-            ],
-            system_instruction=system_instruction
+            contents=contents_list
         )
         return response.text
     except Exception as e:
         print(f"Gemini API Error: {e}")
-        # رسالة الخطأ الداخلي التي ظهرت سابقاً:
         return "عفواً، واجهت خطأ داخلي في نظام الذكاء الاصطناعي."
 
 async def apply_role_action(message: discord.Message, member: discord.Member, role_id: int, action_type: str, color: discord.Color, final_reply: str):
@@ -120,13 +125,11 @@ async def apply_role_action(message: discord.Message, member: discord.Member, ro
             if role_to_apply in roles_to_remove:
                  roles_to_remove.remove(role_to_apply) 
             
-            # التأكد من عدم محاولة سحب رتبة البوت نفسه
             if message.guild.me.top_role in roles_to_remove:
                  roles_to_remove.remove(message.guild.me.top_role)
 
             await member.remove_roles(*roles_to_remove, reason="Automated role removal before applying new action.")
         except discord.Forbidden:
-            # رسالة خطأ إذا كانت رتبة البوت غير كافية
             await message.channel.send("❌ BOT Permission Error: Cannot manage roles. Check BOT hierarchy.")
             return
 
@@ -144,7 +147,7 @@ async def apply_role_action(message: discord.Message, member: discord.Member, ro
     else:
         await message.channel.send(f"❌ Role Application Failed: Check hardcoded IDs.")
 
-# --- 4. Discord Events ---
+# --- 5. Discord Events ---
 
 @bot.event
 async def on_ready():
@@ -155,23 +158,22 @@ async def on_message(message):
     if message.author == bot.user:
         return
 
-    # استخدام category_id للتحقق من قناة التكت
     is_ticket_channel = message.channel.category_id == TICKET_CHANNEL_ID if message.channel.category_id else False
 
     if is_ticket_channel:
         # Accounting Logic (Inside Ticket Channels)
         
-        # التأكد من أن الرسائل تُقرأ حتى يعمل تحليل الـ AI
         messages_history = [f"{msg.author.name}: {msg.content}" async for msg in message.channel.history(limit=10)]
         messages_history.reverse()
-        prompt = f"Ticket history:\n---\n{'\n'.join(messages_history)}\n---\nBased on rules, what is the decision and required action? Reply directed to the punished member."
+        
+        # نرسل سجل المحادثة كنص موحد
+        prompt = f"سجل التذكرة:\n---\n{'\n'.join(messages_history)}\n---\nبناءً على القوانين، ما هو القرار والإجراء المطلوب؟ أجب موجهاً للعضو الذي يتم محاسبته."
 
         ai_response = await get_ai_response(prompt, SYSTEM_PROMPT_ACCOUNTING)
 
         action_keyword = "NONE"
         final_reply = ai_response
         
-        # محاولة استخراج كلمة الإجراء حتى لو لم يكن التنسيق مثالياً
         if "[ACTION:" in ai_response:
             try:
                 start_index = ai_response.rfind('[ACTION:')
@@ -183,7 +185,6 @@ async def on_message(message):
 
         await message.channel.send(f"**🤖 AI Support Reply:**\n{final_reply}")
 
-        # نختار مؤلف الرسالة الأخيرة كعضو مستهدف
         member_to_punish = message.author 
         
         if action_keyword == "WARN_1":
@@ -202,15 +203,19 @@ async def on_message(message):
         
         text_to_ai = message.content.replace(bot.user.mention, '').strip()
 
-        chat_prompt = f"You are a friendly and helpful bot. Reply naturally and engagingly.\n\nQuestion: {text_to_ai}"
+        # موجه النظام الجديد للأسلوب الطبيعي (مثل المساعد الذكي)
+        GENERAL_CHAT_SYSTEM_PROMPT = "أنت مساعد ذكي ولطيف، مهمتك هي الرد على المستخدمين بأسلوب طبيعي وودود ومحترف، مشابه لأسلوب المساعدين الأذكياء من Google. العام الحالي هو 2025. يجب أن تكون جميع ردودك باللغة العربية الفصحى. لديك القدرة على فهم جميع اللهجات العربية (الخليجية، المصرية، الشامية، إلخ)، ولكن الرد يجب أن يكون بالفصحى. لا تذكر أنك بوت أو نموذج لغوي إلا إذا سُئلت."
         
-        ai_response = await get_ai_response(chat_prompt, "You are a friendly, digital companion ready to provide help and information.")
+        chat_prompt = f"سؤال المستخدم: {text_to_ai}"
+        
+        ai_response = await get_ai_response(chat_prompt, GENERAL_CHAT_SYSTEM_PROMPT)
 
-        await message.channel.send(f"👋 {message.author.mention} {ai_response}")
+        # نرسل رد الذكاء الاصطناعي مباشرة ليكون الرد طبيعياً أكثر
+        await message.channel.send(f"{message.author.mention} {ai_response}")
 
     await bot.process_commands(message)
 
-# --- 5. Run Bot ---
+# --- 6. Run Bot ---
 
 print("⚠️ Bot is starting...")
 
